@@ -2,18 +2,10 @@
 
 from __future__ import annotations
 
+from conftest import make_mbox as _mbox
 from email_ingest.state import SkipReason
 from email_ingest.unpacker import unpack_bytes
 from email_ingest.unpacker.mbox_handler import iter_mbox_messages
-
-
-def _mbox(messages: list[bytes]) -> bytes:
-    """Concatenate messages with the MBOX 'From ' separator."""
-    parts = []
-    for i, msg in enumerate(messages):
-        sep = f"From sender{i}@example.com Mon Jul 15 10:00:0{i} 2024\n".encode()
-        parts.append(sep + msg.rstrip(b"\n") + b"\n\n")
-    return b"".join(parts)
 
 
 MSG_1 = b"From: a@example.com\nSubject: one\n\nbody one\n"

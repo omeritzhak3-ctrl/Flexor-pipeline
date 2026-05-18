@@ -11,6 +11,11 @@ import zipfile
 
 import pytest
 
+from conftest import (
+    EML_A as EML_BYTES,
+    force_encrypted_flag as _force_encrypted_flag,
+    make_zip as _make_zip,
+)
 from email_ingest.state import SkipReason
 from email_ingest.unpacker import unpack_bytes
 from email_ingest.unpacker.zip_handler import (
@@ -19,22 +24,6 @@ from email_ingest.unpacker.zip_handler import (
     ZipPasswordProtected,
     open_zip_members,
 )
-
-
-EML_BYTES = (
-    b"From: a@example.com\r\n"
-    b"To: b@example.com\r\n"
-    b"Subject: hi\r\n\r\n"
-    b"body\r\n"
-)
-
-
-def _make_zip(members: dict[str, bytes]) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, data in members.items():
-            zf.writestr(name, data)
-    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -100,38 +89,6 @@ class TestOpenZipMembers:
         data = _make_zip({"big.eml": b"123456789"})
         with pytest.raises(MemberTooLarge):
             zh.open_zip_members(data)
-
-
-def _force_encrypted_flag(zip_bytes: bytes) -> bytes:
-    """Flip the 'encrypted' bit on every header in the archive.
-
-    Python can't *write* encrypted ZIPs, but flipping general-purpose bit
-    flag 0x0001 on a member makes ``zipfile.ZipFile.read`` raise the
-    'File ... is encrypted' RuntimeError we map to ZipPasswordProtected.
-
-    ZIP has two places that carry the flag for each member:
-      * Local file header  (sig PK\\x03\\x04, flag at offset 6..8)
-      * Central directory entry (sig PK\\x01\\x02, flag at offset 8..10)
-
-    ``zipfile`` reads the central directory to populate ``ZipInfo``, so
-    we have to flip both for the read side to see the file as encrypted.
-    """
-    out = bytearray(zip_bytes)
-
-    def flip(sig: bytes, flag_offset: int) -> None:
-        i = 0
-        while True:
-            i = out.find(sig, i)
-            if i == -1:
-                return
-            off = i + flag_offset
-            flag = int.from_bytes(out[off : off + 2], "little") | 0x0001
-            out[off : off + 2] = flag.to_bytes(2, "little")
-            i += len(sig)
-
-    flip(b"PK\x03\x04", 6)
-    flip(b"PK\x01\x02", 8)
-    return bytes(out)
 
 
 # ---------------------------------------------------------------------------

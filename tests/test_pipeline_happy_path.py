@@ -13,63 +13,23 @@ We build synthetic buckets in ``tmp_path`` and verify:
 
 from __future__ import annotations
 
-import io
 import json
-import zipfile
 from pathlib import Path
 
 import pytest
 
+from conftest import (
+    EML_A,
+    EML_B,
+    EML_C,
+    make_mbox as _make_mbox,
+    make_zip as _make_zip,
+    write_file as _write,
+)
 from email_ingest.config import PipelineConfig
 from email_ingest.identity import compute_email_id, pool_relpath
 from email_ingest.pipeline import run_pipeline
 from email_ingest.state import SourceStatus, open_db
-
-
-# ---------------------------------------------------------------------------
-# Fixture helpers
-# ---------------------------------------------------------------------------
-
-
-def _write(path: Path, content: bytes) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(content)
-    return path
-
-
-def _make_zip(members: dict[str, bytes]) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, data in members.items():
-            zf.writestr(name, data)
-    return buf.getvalue()
-
-
-def _make_mbox(messages: list[bytes]) -> bytes:
-    parts = []
-    for i, msg in enumerate(messages):
-        sep = f"From sender{i}@example.com Mon Jul 15 10:00:0{i} 2024\n".encode()
-        parts.append(sep + msg.rstrip(b"\n") + b"\n\n")
-    return b"".join(parts)
-
-
-@pytest.fixture
-def cfg(tmp_path: Path) -> PipelineConfig:
-    return PipelineConfig(
-        bucket_root=tmp_path / "bucket", state_root=tmp_path / "state"
-    )
-
-
-# Reusable email bodies — distinct content so each gets its own email_id.
-EML_A = (
-    b"From: a@example.com\r\nSubject: A\r\n\r\nbody A\r\n"
-)
-EML_B = (
-    b"From: b@example.com\r\nSubject: B\r\n\r\nbody B\r\n"
-)
-EML_C = (
-    b"From: c@example.com\r\nSubject: C\r\n\r\nbody C\r\n"
-)
 
 
 # ---------------------------------------------------------------------------

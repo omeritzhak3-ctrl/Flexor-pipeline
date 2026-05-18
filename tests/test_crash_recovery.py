@@ -24,31 +24,12 @@ from pathlib import Path
 
 import pytest
 
+from conftest import EML_A as EML, write_file as _write
 from email_ingest import pipeline as pipeline_mod
 from email_ingest.config import PipelineConfig
 from email_ingest.identity import compute_email_id, pool_relpath
 from email_ingest.pipeline import recover_startup, run_pipeline
 from email_ingest.state import SourceStatus, open_db, transaction
-
-
-EML = (
-    b"From: a@example.com\r\n"
-    b"To: b@example.com\r\n"
-    b"Subject: hi\r\n\r\n"
-    b"body\r\n"
-)
-
-
-@pytest.fixture
-def cfg(tmp_path: Path) -> PipelineConfig:
-    return PipelineConfig(
-        bucket_root=tmp_path / "bucket", state_root=tmp_path / "state"
-    )
-
-
-def _write(path: Path, content: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(content)
 
 
 # ---------------------------------------------------------------------------
