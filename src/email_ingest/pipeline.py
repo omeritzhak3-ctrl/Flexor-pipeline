@@ -24,6 +24,7 @@ Per-source-file protocol (mirrors the plan's crash-safety section):
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -68,6 +69,8 @@ class RunStats:
     emails_staged: int = 0      # newly written to the pool in this run
     emails_relinked: int = 0    # existing pool entry, new lineage row in this run
     skipped: int = 0
+    recovered_in_progress: int = 0   # in_progress rows reset on startup
+    recovered_tmp_files: int = 0     # leftover tmp files wiped on startup
 
     def merge_decision(self, decision: CdcDecision) -> None:
         if decision is CdcDecision.NEW:
@@ -80,13 +83,76 @@ class RunStats:
             self.files_metadata_only += 1
 
 
+@dataclass(frozen=True)
+class RecoveryReport:
+    """What ``recover_startup`` had to clean up before the run."""
+
+    in_progress_reset: int = 0
+    tmp_files_wiped: int = 0
+
+
+def recover_startup(
+    config: PipelineConfig, conn: sqlite3.Connection
+) -> RecoveryReport:
+    """Crash-recovery sweep run before every pipeline invocation.
+
+    Two cleanups:
+
+    * Any ``source_files`` row left in ``in_progress`` from a previous
+      crashed run is flipped back to ``discovered``. CDC will see the
+      mismatch on the next pass and route the file through the normal
+      re-process path. Because the pool is content-addressed, any bytes
+      from the prior attempt are already at the right path and we get
+      idempotency for free.
+
+    * ``state/tmp/`` is wiped. Atomic writes go via ``tmp/<uuid>`` and
+      then rename into the pool; if the process died after the write but
+      before the rename, the half-written file stays behind. We don't
+      want it confused with a live in-flight write on the next run.
+
+    Returns a small report so the CLI / caller can log what happened.
+    """
+    in_progress_reset = 0
+    with transaction(conn):
+        cursor = conn.execute(
+            "UPDATE source_files SET status = ? WHERE status = ?",
+            (SourceStatus.DISCOVERED, SourceStatus.IN_PROGRESS),
+        )
+        in_progress_reset = cursor.rowcount or 0
+
+    tmp_files_wiped = 0
+    tmp = config.tmp_root
+    if tmp.exists():
+        for entry in tmp.iterdir():
+            try:
+                if entry.is_dir():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+                tmp_files_wiped += 1
+            except OSError:
+                # Best-effort cleanup; a lingering tmp file won't break
+                # the pipeline, only show up as warning-noise.
+                continue
+    tmp.mkdir(parents=True, exist_ok=True)
+
+    return RecoveryReport(
+        in_progress_reset=in_progress_reset, tmp_files_wiped=tmp_files_wiped
+    )
+
+
 def run_pipeline(config: PipelineConfig, conn: sqlite3.Connection) -> RunStats:
     """Process every file currently visible under ``config.bucket_root``.
 
     Idempotent: calling twice with no on-disk changes only does the cheap
-    CDC stat pass.
+    CDC stat pass. Crash-safe: a prior crashed run is reconciled by the
+    ``recover_startup`` sweep at the top.
     """
     stats = RunStats()
+    report = recover_startup(config, conn)
+    stats.recovered_in_progress = report.in_progress_reset
+    stats.recovered_tmp_files = report.tmp_files_wiped
+
     for scanned in scan_bucket(config.bucket_root):
         stats.files_scanned += 1
         verdict = classify(conn, scanned)
@@ -399,4 +465,4 @@ def _utcnow() -> str:
     )
 
 
-__all__ = ["RunStats", "run_pipeline"]
+__all__ = ["RecoveryReport", "RunStats", "recover_startup", "run_pipeline"]
