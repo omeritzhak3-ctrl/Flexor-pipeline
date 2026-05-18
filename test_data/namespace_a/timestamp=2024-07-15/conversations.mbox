@@ -1,0 +1,52 @@
+From dave@example.com Tue Jul 15 09:00:00 2024
+From: dave@example.com
+To: support@example.com
+Subject: Issue with login
+Date: Mon, 15 Jul 2024 09:00:00 +0000
+Message-ID: <login-issue-001@example.com>
+Content-Type: text/plain; charset="utf-8"
+
+Hi Support,
+
+I'm unable to log in to my account since this morning. I keep getting a "session expired" error even after clearing cookies.
+
+My username is dave.wilson.
+
+Thanks,
+Dave
+
+From support@example.com Tue Jul 15 09:15:00 2024
+From: support@example.com
+To: dave@example.com
+Subject: Re: Issue with login
+Date: Mon, 15 Jul 2024 09:15:00 +0000
+Message-ID: <login-issue-002@example.com>
+In-Reply-To: <login-issue-001@example.com>
+Content-Type: text/plain; charset="utf-8"
+
+Hi Dave,
+
+Thank you for reaching out. We identified a session management issue affecting some accounts.
+
+Could you try logging in using an incognito window? We are deploying a fix within the next hour.
+
+Best regards,
+Support Team
+
+From dave@example.com Tue Jul 15 10:30:00 2024
+From: dave@example.com
+To: support@example.com
+Subject: Re: Re: Issue with login
+Date: Mon, 15 Jul 2024 10:30:00 +0000
+Message-ID: <login-issue-003@example.com>
+In-Reply-To: <login-issue-002@example.com>
+Content-Type: text/plain; charset="utf-8"
+
+Hi,
+
+The incognito window workaround worked. I can now log in normally as well.
+
+Thanks for the quick response!
+
+Dave
+
