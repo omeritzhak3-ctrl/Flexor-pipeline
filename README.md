@@ -345,7 +345,25 @@ Pinned by `test_crash_recovery.py`.
 
 ---
 
-## 10. Deliverables checklist
+## 10. Design trade-offs considered
+
+Each row captures a decision point that came up while scoping the
+pipeline, the alternatives that were on the table, what was chosen,
+and what was explicitly given up by choosing it.
+
+| Decision | Options considered | Chosen | Why | What we lose |
+|---|---|---|---|---|
+| **Format coverage for P0** | (a) Lean: EML + HTML + MBOX + ZIP only; MSG/PST stubbed. (b) Lean + MSG via `extract-msg`. (c) Everything including PST via `libpff`/`pypff`. | **(a) Lean** | `test_data/` ships fixtures only for EML/HTML/MBOX/ZIP — no MSG or PST fixtures, a strong signal of intended scope. PST needs system-level libs and can swallow the whole 1–3h budget. The assignment explicitly rewards scoping decisions. | No real PST/MSG extraction in P0. Mitigated by a registry-based unpacker and an `unsupported_format_deferred` skip-reason so adding them later is a one-file change. |
+| **Attachments handling** | (a) Embedded in the staged `.eml`. (b) Extract to sidecar `attachments/<email_id>/...` with their own metadata rows. (c) Defer entirely, document only. | **(a) Embedded** | The assignment says attachments must "remain associated with their parent email and be accessible alongside it" — a `.eml` already does that via MIME multipart. Extraction is a *normalization* concern and the assignment frames normalization as the **next** stage. Keeps the email atom intact. | No queryable attachment metadata yet (counts, MIME types, sizes). Downstream normalization will own that. |
+| **Unique-id scope** | (a) Global: `sha256(content)` — same email across tenants dedupes to one staged file. (b) Tenant-scoped: `sha256(namespace \|\| 0x00 \|\| content)` — each tenant gets its own copy. | **(b) Tenant-scoped** | The spec uses `namespace` deliberately and frames the system as multi-customer. Tenant isolation matters for billing, access control, and compliance; cross-tenant dedup blurs those boundaries with no real upside. Within a tenant, identical content still dedupes — which is what the dedup requirement actually asks for. | Cross-tenant storage savings on identical emails (rare in practice; almost never worth the isolation risk). |
+| **CDC strategy** | (a) Path-only: once `(namespace, partition, relpath)` is processed, never look again. (b) Hash-aware single-step: hash every file every run. (c) Two-step: `(size, mtime)` short-circuit, then content hash if changed. | **(c) Two-step** | The "same file re-uploaded to same partition across runs" edge case requires content-aware logic to handle correctly. Two-step gives correctness without the I/O cost of hashing every file every incremental run — incremental scans usually stat-only. | Slightly more state to manage (we track `size`, `mtime_ns`, and `content_sha256` per source). False negatives possible only if a tool rewrites bytes *and* preserves size+mtime exactly — practically nonexistent. |
+| **Output staging layout** | (a) Partition-mirrored: `staging/<namespace>/timestamp=YYYY-MM-DD/<email_id>.eml`. (b) Content-addressed pool: bytes only at `staging/emails/<shard>/<id>.eml`, partition info in SQLite. (c) Hybrid: content-addressed pool + per-partition `manifest.jsonl`. | **(c) Hybrid** | (a) alone would force byte duplication when the same email appears in two partitions, contradicting the dedup goal. (b) alone would force downstream consumers to always go through SQLite to find partition contents. Hybrid satisfies both: one physical copy per unique email **and** a partition-queryable on-disk view via manifests. | Two artifacts to keep in sync (pool + manifests). Mitigated by writing both inside the same per-source-file transaction with fsync. |
+| **Test fixture generation** | (a) Generate all edge-case fixtures programmatically. (b) Generate only the subset needed to demonstrate edge-case decisions; document the rest. (c) Don't generate any. | **(b) Subset** | The assignment lists 10 edge cases but the tests only need to *prove* the documented behavior for each. Building a real password-protected ZIP, MSG, and PST adds little signal over a unit test on the classifier and skip-log. Subset keeps the test suite fast and the repo binary-light. | A few edge cases (password-protected ZIP, MSG/PST formats) are validated via unit tests on classifier behavior rather than end-to-end fixtures. Documented explicitly above so the reviewer knows the choice. |
+| **Time / ambition** | (a) Tight ~2h MVP. (b) Stretch ~3h: P0 + deeper tests + written-out P1. (c) Go long, ignore the budget. | **(b) Stretch ~3h** | The assignment caps at 1–3h and explicitly rewards good scoping. (a) sacrifices the strong README/design doc that the deliverables section weighs heavily; (c) signals poor judgment on a stated constraint. Stretch leaves room for tests, edge cases, and a real P1 scaling section without overspending. | Some polish items (CI config, type checking, MSG implementation, richer observability) are deferred to P1 and explicitly called out. |
+
+---
+
+## 11. Deliverables checklist
 
 - ✅ `src/email_ingest/` package + `python -m email_ingest run` CLI.
 - ✅ `pytest` suite with happy-path + edge-case tests + crash-recovery
