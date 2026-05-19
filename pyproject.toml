@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "email-ingest"
+version = "0.1.0"
+description = "Email ingestion pipeline: discover, unpack, dedupe, and stage emails with full lineage."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Omer Itzhak" }]
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+# extract-msg is only required if/when MSG support is enabled (currently deferred).
+msg = ["extract-msg>=0.48"]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+email-ingest = "email_ingest.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
